@@ -1,0 +1,1126 @@
+Kubernetes
+
+Kubernetes doesn’t run with swap. We should disable the swap memory from every machine that is part of cluster.
+When we start the cluster API server starts running on the manager. It is the epic center of every communication. Whatever communication happens in the cluster, it will go thru the API server. Every worker node as well as manager an agent called kubelet will run.
+ API servers communicate to kubelet. Kubelet keeps on sending the machine current state like how much CPU/Memory/Pod details to API server periodically. Then API server store all the data to etcd, which is key value data store. 
+Admins interact or give instructions with manager using utility called kubectl, which is installed on manager. API server will check Authentication and Authorization. Then API server will inform the Scheduler in the manager. Scheduler behalf of API find the best node from etcd. Scheduler picks the best node and inform to API. Then API server will initiate a call to kubelet of best node and instruct the node to create container with given image. Every machine agent called kubelet container engine is running. Kubelet will instruct container engines to create containers. Then Container engine will do lift and shift. Container will respond back to kubelet. Then Kubelet will respond to API Server. API servers update the etcd, then to Admin. One more component called kubeproxy will run on every worker, which facilitates container to container communication. On the manager one more component called kube-controller manager, which will communicate to API server, also checking desired stage of node like node controlled, service controller, replica controller, endpoint controller
+Easy way
+NAT will connect with internet and get IP from DHCP. Then Host-only with static IP which will be using Kubernetes communication
+Hardway
+Production environment always uses Hardaway. Only one LAN card IP which will be using Kubernetes communication. Proxy will have 2 interfaces, one connected to local LAN, and another connected to internet. 
+Refer Hardway from YouTube networknuts
+ 
+Kubernetes Lab Setup
+Disable swap
+Check swap
+# swapon -s
+ 
+Disable swap
+# swapoff -a
+ 
+Disable swap permanently
+# vim /etc/fstab
+Comment the swap memory
+ 
+# mount -a
+# swapon -s
+ 
+ 
+Install Kubernetes
+Using Kubernetes official documentation
+Refer : https://kubernetes.io/docs/setup/
+Install Container Runtimes
+Refer https://kubernetes.io/docs/setup/production-environment/container-runtimes/
+       Available container Engines in Kubernetes
+•	Containerd
+•	CRI-O (We are using in this lab)
+•	Docker-Engine
+•	Mirantis Container Runtime
+Using script from below git account
+https://github.com/networknuts/kubernetes
+Scripts  common-1.28.9-without-proxy-may-2024
+# vim common.sh
+# sh common.sh
+ 
+Install Metric AP server
+Refer:https://github.com/networknuts/kubernetes/blob/master/ch-02-pod-scheduling/metric-server.yaml
+# mkdir mypods
+# cd mypods
+# vim matric.yaml
+# kubectl apply -f matric.yaml
+ 
+# kubectl -n  kube-system get pods	
+ 
+Create vimrc
+For Allignment in yaml file create vimrc hidden fimr
+# vim .vimrc
+ 
+# source .vimrc
+
+Creating a cluster with kubeadm
+Refer : https://v1-28.docs.kubernetes.io/docs/setup/production-environment/tools/kubeadm/create-cluster-kubeadm/
+Initialize the control-plane
+NAT – DHCP  Internet (192.118.113.0/24) IP Range
+Host-Only  Static IP (for us 10.0.0.0/8) Use for Internal communication API servce advertise address   Local LAN
+Private IP Range
+Anyone can use these IP range within their LAN safely
+		A – 10.0.0.0/8
+		B – 172.16.0.0/16 – 172.31.0.0 /16 (using as Pod /Container Ips)
+		C – 192.168.0.0/24
+Pull Images
+Recommended to pull the images before initializing the control-plane to avoid searching the images. 
+There is a limit to pulling the images in single day.
+# kubeadm config images pull
+ 
+Check the images using CRI-O
+# crictl images
+ 
+Reset Kubeadm
+	kubeadm reset
+ 
+
+Bootstrap the Cluster
+	kubeadm init will only run in manager
+# kubeadm init --apiserver-advertise-address 10.0.0.100 --pod-network-cidr 172.17.0.0/16
+Then run below highlighted commands
+ 
+Create Directory
+	# mkdir -p $HOME/ .kube
+Copy admin.conf file to .kube/config directory
+	# sudo cp -i /etc/kubernetes/admin.conf $HOME/.kube/config
+Change the ownership to the current user
+# sudo chown $(id -u):$(id -g) $HOME/ .kube/config
+ 
+
+Deploy a pod network to the cluster
+Different network in Kubernetes cluster
+1.	Management network/underlay network using only to communicate internally
+2.	Docker network is limited to machine
+3.	Pod network/overlay network using only to communicate across the cluster
+
+	calico file will be installed only on the manager 
+Refer https://docs.tigera.io/calico/latest/getting-started/kubernetes/self-managed-onprem/onpremises
+# curl https://raw.githubusercontent.com/projectcalico/calico/v3.28.1/manifests/calico.yaml -O
+ 
+# kubectl apply -f calico.yaml
+ 
+ 
+Kubectl Autocomplete 
+Refer : https://kubernetes.io/pt-br/docs/reference/kubectl/cheatsheet/
+Autocomplete configuration In the current shell Bash, the Bash-Completion package needs to be installed first. This will give all the shell sub commands
+# source <(kubectl completion bash) 
+To permanently add autocomplete to your bash shell.
+# echo "source <(kubectl completion bash)" >> ~/.bashrc 
+ 
+
+Setup Worker nodes
+Copy file from manager node to worker node
+# scp common.sh vinitha@10.0.0.1:
+ 
+Copy common.sh file to worker node1 and run
+# cp /home/vinitha/common.sh .
+# ll
+ 
+	Run the common.sh
+#sh common.shv
+If we missed the token generate the token from manager
+Generate the token
+# kubeadm token create --print-join-command
+ 
+Run the token in worker node
+# kubeadm join 10.0.0.100:6443 --token 2hefe1.9lfmq601sbpfzj7s --discovery-token-ca-cert-hash sha256:48a67857450dfe18688b86627d233854485a96085e82736460373845fcc62554
+ 
+Check the nodes
+# kubectl get nodes
+	Status should be ready
+ 
+# kubectl -n kube-system get pods
+Ready status Should be 1/1
+ 
+Check node with detailed information with IP
+# kubectl get nodes -o wide
+ 
+Change worker internal IP
+Add highlighter ip to kubeadm-flags.env
+# vim /var/lib/kubelet/kubeadm-flags.env
+ 
+# systemctl daemon-reload
+# systemctl restart kubelet
+ 
+Do the same with worker node as well
+# kubectl get nodes -o wide
+ 
+Check information about each node
+# kubectl describe node ckamanager
+
+Labels
+Labels are key-value pairs that Kubernetes uses to identify and organize resources.
+It is indexed in etcd. It will use for filter
+Recommended Labels
+1.	Name
+2.	Managed by
+3.	Version
+4.	Component
+5.	Part of
+6.	instance
+	Why is allocatable RAM less than the capacity /available of RAM in Kubernetes?
+ 
+Some compute/ Memory and CPU is reserved for OS and kubelet to run agents
+A big chunk is allocated to Kubernetes, with some compute reserved for eviction thresholds.
+Eviction threshold is the process by which release the stress.
+It can be configurable, different cloud provider configure separately
+Memory is divided into 4kb pages , if we required more than 4kb to run DB or then we can configure hugepages 
+ 
+Pod
+Atomic unit of application deployment in docker world is called container.
+Atomic units of application deployment in Kubernetes world is called pod.
+Pod is wrapper of the application
+IP and storage is given to POD
+CPU/ Memory is given to container
+One pod = 1 container = 1 process (Recommended)
+But we can run more than containers in single pod, but it is not recommended
+We cannot run more than one container using same port number
+Sidecar containers help container
+Create Resources
+Imperative
+Executing command directly on the shell like docker. (Not recommended, We cannot share or reuse)
+Create Pod
+# kubectl run webserver --image=niginx
+ 
+If again use same command
+ 
+# kubectl describe pod webserver 
+Delete Pod
+# kubectl delete pod webserver
+ 
+Declarative: 
+Writing code in YAML file and saved in version control system. (Using in production environment)
+Refer : https://kubernetes.io/docs/concepts/workloads/pods/
+Create Pod
+# mkdir mypods
+# vim mypod.yml
+ 
+# kubectl create -f mypod.yml
+ 
+Delete Pod
+# kubectl delete -f mypod.yml
+ 
+# kubectl get pods
+	 
+Container name can be same as we are creating different pod
+1/1 one container is defined, and one is running
+If more than one pod running in container. Default log will show first pod
+We can pass container name using -c container name
+Check Logs
+# kubectl logs webapp
+ 
+Check logs of a particular pod 
+# kubectl logs webapp -c boxtwo
+ 
+Check particular word from logs 
+# kubectl logs webapp -c boxotwo| grep warning 
+ 
+Check particular word from logs and redirected to a file
+# kubectl logs webapp -c boxotwo| grep warning > /tmp/mylogs
+ 
+You should never use kubectl create and always use kubectl apply
+First Create then apply will work, but not recommended
+When using apply create resources data and stored in /etcd
+Last applied Configuration – YAML stored in JSON format (LOC)
+Components stored in /etcd
+Show live object configuration – how it is stored in /etcd
+Create will not store Last applied Configuration (LAC) while apply will store LAC inside LOC in annotation section
+We will not be able to update using kubectl create
+# kubectl apply -f mypod.yml
+  
+Check Label
+# kubectl get pods --show-labels 
+# kubectl get pods -L app -L client -L env -L team
+ 
+Check Label with condition
+We can use != , in, and Operator also in conditions
+# kubectl get pods -l "env=test"
+ 
+
+Quality of services
+
+Set the limits for pod 
+We have 3 qualities of services (QOS), which is set the limits for pod 
+1.	BestEffort Pod
+•	No mention of CPU/memory in YAML
+•	Kubernetes will try to give its best, but no member committed
+•	It is Least priority pods
+•	Dev/Test Application (Don’t care about performance)
+# kubectl apply -f mypod.yml
+# kubectl describe pod apache
+ 
+2.	Burstable
+•	There is mention of CPU/memory in YAML
+•	Limit is always greater than Requests
+•	Requests is guaranteed
+•	If no CPU/Memory then pod will migrate to another node, if no node available pod will be pending status
+•	Limit is the max can use, if needed
+•	Request is used by scheduler
+•	It is second priority pods
+•	Application which downtime affordable/Critical
+•	Load pattern
+•	Critical/Important Applications, but Under normal condition load is normal and weekend/or any frequent occasion load go up, then bandwidth reserved for 
+Resources
+Limits
+CPU
+Memory
+Requests
+Limits
+CPU
+Memory
+ 
+# kubectl apply -f burst.yml
+# kubectl describe pod burst
+ 
+
+3.	Guaranteed
+•	There is mentioned of of CPU/memory in YAML
+•	Limits is equal to requests
+•	Highest priority pods
+•	Consistent applications/
+•	If guaranteed pod is in stress, it will send to best effort pod, then burstable pod
+•	Critical/Important Applications, but consistent performance
+
+ 
+# kubectl apply -f guaranteed.yml
+# kubectl describe pod guarantee
+ 
+
+Scheduler find the node to run the pod
+Scheduler using request while deploying the pod
+
+	How much memory should a node have in order to run the pod (Interview)
+Pod total compute = sum of container compute + pod overhead (Network space, IP, Volume)
+Kubelet will refer to the limit and scheduler refer the request.
+If Memory Exceed kubelet will inform to API server that this pod will trying to take more memory, then API will instruct to the host to execute OOM (Out Of Memory ) killer. OOM killer will restart the container 
+If CPU exceeds, API server instruct the machine to do CPU Throttling  (ie. Slow down the process)
+Less compute will given to container
+Check current load 
+# kubectl top nodes
+ 
+# kubectl top pods
+ 
+Checking stress
+Refer: https://github.com/networknuts/kubernetes/blob/master/ch-01-pods-containers/pod-with-memory-exceed.yml
+# vim stess.yaml
+ 
+ 
+# kubectl describe pod stress
+137 is the exit code for OOMKilled
+ 
+Check logs
+	Do you know the details of OOMKiller from logs
+# journalclt | grep -i oom 
+# kubectl describe pod stress
+ 
+
+Deployment
+
+When we run application directly as a pod following limitations 
+•	No self-healing – if pod got deleted it will not be automatically recreated
+•	No scaling- It will not auto scale or no manual
+•	No application upgrades without downtime
+•	No Rollback if something bad happens without downtime	
+ 
+Solution
+•	Deploy the application as Deployment in all the production environments
+•	Deployment will create Replica set which will take care pod Upgrade and Rollback
+•	Replica set will create pods parallelly/simultaneously 
+•	Benefits – Self healing
+•	Scale manually and Auto scale
+Refer https://kubernetes.io/docs/concepts/services-networking/service/
+
+Pod should be created using same label as Replica set while Deployment name can be different 
+ 
+ 
+Check Deployment
+# kubectl get deploy
+ 
+Check Replica Set
+# kubectl get rs
+ 
+Check Pods
+# kubectl get pods
+ 
+Relationship codes
+	Name of Replica set is random number
+	Deployment name will be used as a prefix against replica set name 
+	Pod names is prefixed by the replica set name
+	Replica set name is prefixed by the Deployment name
+
+ 
+
+Describe Deployment
+# kubectl describe deployments nginx-deployment
+Deployment creates Replica set
+ 
+
+Describe Replica Set
+# kubectl describe rs nginx-deployment-86dcfdf4c6
+Pods are always created replica set parallelly (at same time)
+ 
+Self healing	
+# kubectl get pods -o wide
+ 
+# kubectl delete pod nginx-deployment-86dcfdf4c6-wfvdj
+ 
+New pod created automatically
+ 
+
+Service
+•	We cannot rely on pod IP, when new pod created IP will get changed
+•	Service act like a load balancer
+•	Service has a fix IP, and this IP to user will hit
+•	Service has an attribute called selector, which pod shall user hit
+•	Service has an attribute called Endpoint, 
+•	When the moment we create the service, it scan the cluster and it  found the pod, then write IP and port number in the Endpoint
+•	Label of pod must match the replicate set and selector service 
+•	If Pod has extra label no issue
+•	Container port must match the Target ports
+ 
+Port number is which port we hit
+Target port is port of the container
+Types of Services
+•	3 types of Services which runs in a cluster. One application can be use multiple services
+1.	Cluster IP Service: It is default service, which is not visible outside the cluster
+2.	Node Port Service: Expose Application to outside the cluster, It map port to the node IP, but not recommended, because You have to share you node IP, which is compliance issue.
+ 
+3.	Load Balance Service: Expose Application to outside world, but it is available only on Cloud Platform (Recommended) 
+Alternative options: Ingress Controller or Service mesh=[; deployed in enterprise
+Service Mesh :  is using to control the security between the application/ Control the ingress traffic
+Control the egress traffic to apply the rules
+
+Check service
+Refer : https://kubernetes.io/docs/concepts/workloads/controllers/deployment/
+# kubectl get svc
+ 
+Describe service 
+# kubectl describe svc nginx-dep-svc
+Endpoint is the Pod Ips
+We hit to IP , Cluster IP means, this IP is available only within the Cluster
+ 
+Troubleshooting
+If app not reachable customer is complaining, check the endpoints with below commands
+# kubectl describe svc nginx-dep-svc
+And Pods are running and endpoints not the 99% the label of selector is mismatch
+
+Deployment Strategies
+Recreate: 
+•	Terminate the old version and release the new one.
+•	Best for development
+•	Pro: application state entirely renewed
+•	Cons: downtime that depends on both shutdown and boot duration of the application
+Ramped: Rolling update
+•	Release a new version on a rolling update fashion, one after the other
+
+Pro: 
+•	version is slowly released across instances
+•	convenient for stateful applications that can handle rebalancing of the data
+
+Cons:
+
+•	Rollout/rollback can take time
+•	Supporting multiple apis is hard
+•	No control over traffic
+
+blue/green: 
+•	Release a new version alongside the old version then switch traffic
+Pro:
+•	instant rollout/rollback
+•	avoid versioning issue, change the entire cluster state in one go
+Cons:
+•	requires double the resources
+•	proper test of the entire platform should be done before releasing to production
+•	handling stateful applications can be hard
+
+canary: 
+•	Let the consumer do the testing
+•	Release a new version to a subset of users, then proceed to a full rollout
+Pro:
+•	version released for a subset of users
+•	convenient for error rate and performance monitoring
+•	fast rollback
+Cons:
+•	slow rollout
+•	fine tuned traffic distribution can be expensive (99% A/ 1%B = 99 pod A, 1 pod B)
+A/B testing 
+A/B testing is a user experience research method that compares two or more versions of a page or website to determine which performs better
+
+•	Best for feature testing on a subset of users
+•	A/B testing is really a technique for making business decisions based on statistics, rather than a deployment strategy.
+Pro:
+•	requires intelligent load balancer
+•	several versions run in parallel
+•	full control over the traffic distribution
+Cons:
+•	hard to troubleshoot errors for a given session, distributed tracing becomes mandatory
+•	not straightforward, you need to setup additional tools
+
+Refer https://github.com/networknuts/kubernetes/blob/master/ch-03-deployments/deployment-with-strategy 
+
+ 
+
+ 
+History of deployment
+Check how many times deployment updated
+Enable Annoutation
+	# kubectl rollout history deployment hello-deploy
+	 
+
+ 
+Roll back to previous Version
+Refer: https://kubernetes.io/docs/reference/kubectl/generated/kubectl_rollout/ 
+#kubectl rollout undo deployment hello-deploy
+ 
+
+
+Probes
+Common interview question
+Without prob no deployment running in production
+Interval
+Wait
+Failure threshold
+Startup Probe
+•	Run only once when the pod start running 
+
+Readiness Probe
+•	Readiness probe cannot start before the Startup probe
+•	Failure Threshold should be more than Startup prob
+•	Check pod at regular interval
+•	If pod not responding after wait time, pod will be considered as failure
+•	Consecutive failure readiness probe remove pod from service endpoint(Quarantine the pod)
+•	Nos request will be going to malfunction probe
+
+Liveness Probe
+•	Check pod at regular interval
+•	Liveness probe cannot start before the Readiness probe;
+•	If it fails, It will restart the container, because the process is running in container
+•	Once the container restarts the container will be recreated again taking the reference from the image
+•	Liveness prob Failure Threshold should be more than Readiness Prob Failure Threshold
+
+DeamonSet
+•	One copy of application should run on every machine (Eg: Monitoring agent/Backup Agent/Log Collector) the DeamonSet recommended 
+•	
+Refer : https://kubernetes.io/docs/concepts/workloads/controllers/daemonset/
+
+ 
+
+# kubectl -a kube-system get ds
+
+ 
+Deamon Set run on separate dedicated Namespace(Recommended)
+
+ 
+ 
+Namespaces
+Check namespace
+# kubectl get ns
+# kubectl get namespaces
+ 
+Default namespace
+•	Default namespace assigned for users’ application
+•	Isolation of environment
+Cons:
+•	Name clash
+•	Resource allocation will not be controlled
+•	Every pod can have communicated each other, which will be security concerns
+•	Remaining 3 namespaces is reserved Kubernetes own application
+Dedicated Namespace 
+•	Virtual fencing
+•	Isolation of environment
+•	No Nameclash
+•	Assign Quota
+Create namespace
+# kubectl create ns dev
+
+Create pod in namespace
+# kubectl apply -f mypod.yaml -n dev
+# kubectl -n test apply -f mypod.yaml 
+ 
+Hardcode in yaml file (not recommented)
+Cons: Code will not be reusable
+ 
+
+Create quota in namespace
+# kubectl -n dev create quota dev=quota –hrd=cpu=2,memory=3G, pods=5,services=3
+ 
+ 
+If we configure quata applied, resource block must be available  in file
+ 
+ 
+kubelet is using the limit. Request is respecting quota not the limit
+ 
+
+Check all in namespace
+#kubectl -n dev get all
+ 
+
+Set Limit Range
+Default will be applied when there is no Resource block
+ 
+ 
+ 
+ 
+Delete namespace
+	# kubectl delete ns dev
+	 
+
+
+Network Policies
+•	Control communication between namespaces and pods
+•	By default, it is not restricted, any namespace/pod can communicate each other
+•	When you want to apply network policies, make sure your namespaces must have label
+•	Kubernetes identified the namespace by its respective labels
+•	Kubernetes take decision based on labels
+Label the namespace
+# kubectl label as de as area-dev
+ 
+	 
+Check the Labels
+# kubectl get ns --show-labels
+ 
+
+Check the pads from specific namespace
+# kubectl -n dev get pods --show-labels -o wide
+ 
+Execute command to a particular  namespace pod
+Without netwok policies can reach to any namespace pods
+# kubectl -n dev exec devone curl http://172.17.10.111
+ 
+
+Scenarios in Network Policies (Exam questions)
+1.	All the pods from the dev namespace should be able to talk to all the pods in the prod namespace on a particular port number (i.e .80) and test namespace tried to talk that should be denied.
+	Policies applied non prod namespace, it will allow only traffic from dev namespace
+Refer : https://kubernetes.io/docs/concepts/services-networking/network-policies/
+	 - (hyphen) is considered as OR
+	If we remove –(hyphen), it become AND
+	{} – allowed all
+
+# vim network-policies-yaml
+ 
+# kubectl apply -f  network-policies-yaml
+# kubectl -n prod describe network-policy
+ 
+Allowed from all pods from dev namespace
+ 
+
+Not allowed from test namespace
+ 
+
+2.	Only devone pods from the dev namespace should be able to talk to all the pods in the prod namespace on a particular port number (i.e .80) and test namespace tried to talk that should be denied.
+	Policies applied non prod namespace, it will allow only traffic from dev namespace
+Refer : https://kubernetes.io/docs/concepts/services-networking/network-policies/
+ 
+Not allowed from devtwo namespace
+	 
+
+
+3.	Only devone pods from the dev namespace should be able to talk to only prodone pod in the prod namespace on a particular port number (i.e .80) and test namespace tried to talk that should be denied.
+	Policies applied to one pod to another pod
+Refer : https://kubernetes.io/docs/concepts/services-networking/network-policies/
+ 
+Not allowed from devtwo to prodtwo
+
+
+Node Selector
+•	Default Scheduler will select node
+•	Both Node selector and Affinity are used by the pod to choose the node (pod perspective)
+•	Node Selector is the way the Pod will select the node (Exam question) 
+•	Only single condition (We cannot use AND/OR)
+•	Two step process
+	Label the node (Based on Hardware feature or Management Feature)
+I.e. #kubectl label node nodeone cpu=i5 OR Environment Prod /Dev/Test 
+	Use node selector in pod
+Label the node (Custom label)
+# kubectl label node nodeone cpu=i7
+# kubectl label node nodeone disk=ssd
+# kubectl label node nodeone memory=large
+
+ 
+Remove Label from node
+# kubectl apply -f  network-policies-yaml
+# kubectl label node nodeone cpu-
+# kubectl label node nodeone disk-
+ 
+Show Labels of node 
+# kubectl get nodes  --show-labels
+ 
+(In Tabular Fomat)
+# kubectl get node  -L cpu -L meory -L disk -L env
+ 
+Node Selector (Container Level)
+Refer : https://kubernetes.io/docs/concepts/scheduling-eviction/assign-pod-node/
+ 
+ 
+ 
+Troubleshoot
+Pod Pending State (Mismatch of CPU)
+# kubectls -n dev describe pod  nginx--
+ 
+Insufficient Memory
+ 
+ 
+
+Affinity and Anti Affinity
+•	Both Node selector and Affinity are used by the pod to choose the node (pod perspective)
+•	Two types of Affinity and Anti Affinity
+ 
+Affinity                   
+1.	Node Affinity
+2.	Pod Affinity
+Anti-Affinity
+1.	Node Anti-Affinity
+2.	Pod Anti-Affinity
+ 
+•	AND/OR allowed
+•	Checked only at time of Scheduling, not at the time of Executing. 
+If we add label after an existing running a pod in a node, it will not effect existing node. Only new scheduling will be affected and ignore the execution.
+•	requiredDuringSchedulingIgnoredDuringExecution: - Mandatory condition
+•	Two step process
+	Label the node (Based on Hardware feature or Management Feature)
+	Use Affinity/Anti-Affinity in the pod
+
+Node Affinity                   
+Refer : https://github.com/networknuts/kubernetes/blob/master/ch-02-pod-scheduling/pod-for-specific-node-selector.yml 
+ 
+ 
+Affinity- cannot (NotIn)
+ 
+ 
+
+Pod Affinity             
+Deployment should always go to a particular pod      
+ 
+ 
+
+Pod Anti Affinity
+When we don’t want to a particular pod to run on a same node machine due to some compliance issue, security issue or resources issue
+ 
+ 
+
+Taints and Tolerations
+•	Both Taints and Tolerations are used by the node to choose the pod (node perspective)
+•	A way by which a node can refuse the pod
+•	Taint is applied on the node and Toleration is applied on the pod
+•	Syntax is kubectl taint node <name of node>key= Value: policy
+•	Whatever policy applied in the node, same policy need to be applied in toleration in the pod .
+•	2 different Policies
+1.	No Schedule policy
+•	If pod does not satisfy the condition, it will not schedule any pod, node will not accept any pod. Because none of the pods is showing toleration.
+•	One toleration added to pod, node can be deployed that pod
+•	If a pod already running in a node, after that any taint applied, In case the policy is No Schedule, then these pods won’t be touch.
+•	New scheduling will be based on the taints
+
+2.	No execute Policy
+•	If a pod already running in a node, after that any taint applied, In case the policy is No Execute, then move existing pods to another node
+•	No Execute policy is not recommended, due to this reason
+•	Manager is tainted that is why no node is deployed in manager node
+•	If 2 taints are there, both taint should be satisfied. Also Node selector also satisfied
+# kubectl describe node manager | grep -I taint
+ 
+
+Create Taint
+# kubectl taint node nodeone food=lassi:NoSchedule
+ 
+# kubectl describe nodeone node nodeone  | grep -i taint
+ 
+ 
+# kubectl taint node nodeone food=lassi:NoExecute
+ 
+ 
+
+Remove Taint
+# kubectl taint node nodeone food=lassi:NoSchedule-
+ 
+# kubectl edit node nodeone  (Not Recommented)
+ 
+
+Create Toleration
+Refer: https://kubernetes.io/docs/concepts/scheduling-eviction/taint-and-toleration/
+ 
+ 
+
+Persistent Storage
+•	Storage in Kubernetes cluster is known as persistent volume subsystem
+•	NFS storage will not act of Kubernetes cluster
+•	It is more or less like LVM and it has 3 major components
+1.	Persistent Volume - PV
+2.	Persistent Volume Claim - PVC
+3.	Storage Classes – SC:- It is used for dynamic storage
+•	Storage in the cluster visible as PV, but Pod cannot access PV directly 
+•	We need to create PVC and pod connect to PVC and PVC connect to PV. PVC act as a ticket to PV. 
+•	It is a one-to-one mapping; we will not be able to create single block for more than one Application
+•	Size  PV/PVC size should not be more than Block storage size
+•	Permission : PV permission should be match with PVC permission
+1.	Read Write Many (RWX)
+2.	Read Write One (RWO)
+3.	Read Only Many (ROM)
+•	One PV with 2 PVC with different permission not allowed
+•	Data retain policy: If application is deleted 
+•	Difference storage type support different permissions
+Create Storage
+NFS is NAS
+# lsblk
+ 
+Format Disk
+# sudo fdisk /dev/sdb
+ 
+Create Partition
+# partprobe
+ 
+
+Create filesystem
+# lsblk
+ 
+# sudo mkfs.ext4 /dev/sdb1
+ 
+Confirm
+	# sudo blkid
+ 
+Create directory with blockId with permission
+# sudo mkdir –mode=777 /appone
+# sudo vim /etc/fstab
+ 
+Mount the storage 
+# sudo mount -a
+# df -h
+ 
+Install the Storage package
+# sudo apt update
+# sudo apt upgrade
+ 
+Install the NFS
+# sudo apt install nfs-kernel-server
+# sudo vim /etc/exports
+ 
+Reload
+# sudo /etc/exports -r
+Activate
+# sudo /etc/exports -a
+Restart the service
+# sudo systemctl restart nfs-kernel-server
+Confirm
+# sudo showmount-e <ip of storage account server IP>
+ 
+Install nfs package in manager and all the nodes
+# sudo apt install nfs-common
+# sudo showmount-e <ip of storage account server IP>
+ 
+Introduce storage in the Kubernetes cluster as PV
+Create PV
+Refer : https://kubernetes.io/docs/concepts/storage/persistent-volumes/
+ 
+Check PV
+# kubectl get pv 
+Create PVC
+ 
+ 
+Check PVC
+# kubectl get pvc
+ 
+# kubectl describe pvc pvc-appone
+ 
+Mount to app
+ 
+ 
+
+Storage Class
+•	Storage class is a provisioner, which is a third-party plug-in which we have to add to our cluster.
+•	Storage class is a dynamic storage.
+•	Create PVC to access to storage class. We will not created PV, instead storage class will create a directory and mount in the storage, then create PV for us
+
+Introduce storage in the Kubernetes cluster as Storage Class
+Add nfs Provisioner
+Refer : https://github.com/networknuts/kubernetes/blob/master/ch-06-storage/storage-class-nfs
+Install Helm
+curl https://baltocdn.com/helm/signing.asc | sudo apt-key add -
+sudo apt-get install apt-transport-https --yes
+echo "deb https://baltocdn.com/helm/stable/debian/ all main" | sudo tee /etc/apt/sources.list.d/helm-stable-debian.list
+sudo apt-get update
+sudo apt-get install helm
+
+
+# sh helm-install.sh
+ 
+# hel
+ 
+Add the Helm Repository 
+Refer: https://github.com/kubernetes-sigs/nfs-subdir-external-provisioner
+# helm repo add nfs-subdir-external-provisioner https://kubernetes-sigs.github.io/nfs-subdir-external-provisioner/
+ 
+# helm repo list
+ 
+# helm repo update
+
+Add the Provisioner 
+Create a namespace
+kubectl create ns storagenfs
+Add the provisioner
+# helm install nfs-subdir-external-provisioner \
+nfs-subdir-external-provisioner/nfs-subdir-external-provisioner \
+--set nfs.server=10.0.0.199 \
+--set nfs.path=/k8sdata \
+--set storageClass.onDelete=true -n storagenfs
+
+ 
+
+Check Provisioner
+# helm -n storagenfs list
+ 
+# kubectl -n storagenfs get all
+ 
+Check Storage Class
+# kubectl get sc
+ 
+# kubectl describe sc nfs-clent
+ 
+
+Create PVC
+Provide Permission
+# chmod -R 777 /k8sdata
+ 
+ 
+Check PVC
+# kubectl get pvc
+ 
+Check PV
+ 
+Go to Storage Machine and run
+# /k8sdta/all
+ 
+Mount to app
+	 
+# kubectl describe pvc pvc-appone
+ 
+ 
+Role Based Access Control (RBAC)
+•	Kubernetes can integrate itself with any Identity providers (i.e. Active directory)/Authentication method like
+	ADS
+	LDAP
+	IPA
+	OpenSSL
+Cluster Role
+If users have permission is in the whole cluster is known as Cluster Role. Cluster Role is attached to a Cluster. We have predefined cluster role (i.e. Cluster Admin Role. Edit. view)
+Role
+If users have permission is in any specific namespace is known as Role. Role is attached to a namespace
+Refer :  https://github.com/networknuts/kubernetes/blob/master/ch-07-rbac/steps-for-user-authentication 
+
+Creating Openssl key
+	When manages  installing the Kubernetes a self-signed certificate authority is automatically created
+	csr Certificate Singing Request
+
+# openssl genrsa -out vinitha.key 2048
+ 
+Converting key into .csr from his workstation machine
+# openssl req -new -key vinitha.key -out vinitha.csr -subj "/CN=vinitha"
+
+User submit his key and csr to CA (on manager)
+# scp vinitha.key user.csr login@manager:
+Root CA will convert .csr into .crt and send the .crt back to user
+# openssl x509 -req -in vinitha.csr -CA /etc/kubernetes/pki/ca.crt -CAkey /etc/kubernetes/pki/ca.key   -CAcreateserial -out vinitha.crt -days 365
+
+# scp user.crt login@workstation:
+
+User will create a .kube directory under his home and copy the config file sent by root CA
+
+User also needs to install kubectl on his workstation
+# sudo snap install kubectl --classic
+
+Once this is done root CA will create user credentials on Kubernetes manager and limit user to a namespace
+dev, for this example
+# kubectl config set-credentials vinita --client-certificate=vinita.crt --client-key=vinitha.key
+# kubectl config set-context vinitha-context --cluster=kubernetes --namespace=dev --user=vinitha
+
+Refer : https://kubernetes.io/docs/reference/access-authn-authz/rbac/
+Create Role
+ 
+All the resources deployed which can be created inKubernetes and their  APIs.
+Use the word from left hand side
+# kubectl api-resouces
+ 
+Role binding 
+ 
+Create config file in workstation
+Never share Kubernetes admins session to the user 
+ 
+Check my permission
+#  kubectl auth can-i
+# kubectl get roles
+•	Any user need to Kubernetes admin, Add the user ti Cluster admin role
+
+Secrets
+•	Anything which is sensitive and have to use it into pod
+•	Convert into secret(ie. Username/password/API key/SSH Key)
+•	Small values – Key =Value format
+•	Secrets are not encrypted, they are encoded with base 64 algorithm
+•	They are stored in plain text in /etcd (data at rest is not secure)
+
+ 
+
+Pass environment variable
+Refer : https://kubernetes.io/docs/tasks/inject-data-application/define-environment-variable-container/
+ 
+Create Secret
+Imperative
+	# kubectl create generic mysqlcreds –from-literal password=redhat123
+	# kubectl get secrets
+	 
+Decode secret
+# kubectl get secrets mysqlcreds -yaml
+	 
+# echo dhvdkzhvj | base64 –decode
+# echo dhvdkzhvj | base64 –d
+	 
+Use secret in pods as evn Variable
+Refer: https://kubernetes.io/docs/tasks/inject-data-application/distribute-credentials-secure/ 
+ 
+Imperative
+Refer : https://kubernetes.io/docs/tasks/configmap-secret/managing-secret-using-kubectl/
+Generate username and password
+# echo vinitha | base64 
+ 
+
+Config Maps
+•	Config maps is non sensitive data
+•	Used to change behavior of the application. 
+•	Eg: Listen parameter cannot take more than one valued
+•	Create a config file and convert it into config map
+•	User can use same image, but before running it will use config map
+•	Then config file will overwrite the config file from the default image at the runtime
+•	Config map is a key value
+
+ 
+Create Config File
+	# kubectl exec it prod-apache /bon/bash
+	# cat /etc/httpd/conf/httpd.conf
+	# vim httpd.conf
+ 
+Convert Config File to Config Map
+# kubectl create configmap dev-apache 
+Refer: https://kubernetes.io/docs/concepts/configuration/configmap/ 
+Volume mount the location inside the container
+ 
+Upgrade Cluster
+Refer https://kubernetes.io/docs/tasks/administer-cluster/kubeadm/kubeadm-upgrade/ 
+•	SSH Access(Root) should be there
+•	Take backup before upgrading it
+•	kubelet must not be newer than kube-apiserver.
+•	kubelet may be up to three minor versions older than kube-apiserver (kubelet < 1.25 may only be up to two minor versions older than kube-apiserver).
+# sudo apt update
+# sudo apt-cache madison kubeadm
+#sudo vim /etc/apt/sources.list/kubernetes.list
+ 
+# sudo apt-mark unhold kubeadm && \
+sudo apt-get update && sudo apt-get install -y kubeadm='1.31.1.0' && \
+sudo apt-mark hold kubeadm
+# sudo apt-mark hold kubeadm
+# kubeadm version
+# sudo kubeadm upgrade plan
+# kubeadm upgrade v1.29.4
+For the other control plane nodes
+# sudo kubeadm upgrade apply
+Drain the node 
+# kubectl drain manager --ignore-daemonsets
+Restart the kubelet:
+# sudo systemctl daemon-reload
+# sudo systemctl restart kubelet
+Uncordon the node
+Bring the node back online by marking it schedulable:
+# kubectl uncordon <node-to-uncordon>
+Backup of Kubernetes Cluster
+•	Backup /etcd -built-in tool is etclctl. In Practical world using commercial applications like Velero
+•	In Velero we can schedule in time/namespace. It will automatically integrate with Cloud Platform
+•	Backup configuration – YAML (if using git It will automatically backup/versioning)
+•	Backup storage (storage team will take care
+Snapshot using etcdctl options
+Default directory
+	# sudo ll /etc/Kubernetes/pki/etcd         
+
+ETCDCTL_API=3 etcdctl --endpoints=https://127.0.0.1:2379 \
+  --cacert=<trusted-ca-file> --cert=<cert-file> --key=<key-file> \
+  snapshot save <backup-file-location>
+Backup using Velero
+Refer : https://github.com/networknuts/kubernetes/blob/master/ch-10-high-value-extra/backup-using-velero
+	Install Amazon Cli
+# velero backup create dev-backup –include-namespace dev
+# velero backups
+
+Restore from backup                                                                
+Refer: https://kubernetes.io/docs/tasks/administer-cluster/configure-upgrade-etcd/ 
+Default directory
+/var/lib/etcd/member/snap/
+•	Practically vallero is using
+etcdutl --data-dir <data-dir-location> snapshot restore snapshot.db
+Upgrade kubelet and kubectl 
+# replace x in 1.29.x-* with the latest patch version
+sudo apt-mark unhold kubelet kubectl && \
+sudo apt-get update && sudo apt-get install -y kubelet='1.29.x-*' kubectl='1.29.x-*' && \
+sudo apt-mark hold kubelet kubectl
+Ingress Controller
+•	Deployment in Cloud will be exposed to Load balancer which will provide public IP/FQDN
+•	User will map Public IP/FQDN to a domain name
+•	Load Balancer is not the ideal solution
+•	Then will create ingress controller which is single entry and exit point.
+•	Ingress resource is the rules for the ingress controller
+•	Different domain name will be pointing to same FQDN in ingress controller, as per the ingress resource rule it will hit to the corresponding service/pod
+ 
+ 
+ 
+ 
+ 
+
+ 
+# helm repo list
+# helm repo update
+#kubectl create ns nginx-ingress
+Install ingress-nginx
+# helm install ingress-nginx ingress-nginx/ingress-nginx -n nginx-ingress
+kubectl -n nginx-ingress get all
+ 
+Create Deployment
+	 
+# kubectl -n nginx-ingress get svc
+# kubectl get ingress
+Create Ingress Resource
+	 
+
+Monitoring
+•	Prometheus is the monitoring tool
+•	Prometheus will collect the data
+•	It has 2 components
+•	Prometheus Server 
+•	Prometheus Node- Exporter which is the agent need to install all the machine, which will collect matric and will send to Prometheus server
+•	Grafana will get the data from Prometheus, then it will show Grafana dashboard
+•	Helm is the package manager for the Kubernetes
+•	Package : All the dependencies which need to run the application will be part of Package
+Install Helm
+Refer : https://github.com/networknuts/kubernetes/blob/master/ch-10-high-value-extra/lens-prometheus-grafana
+ 
+Install Prometheus 
+Install Kube Prometheus Helm Chart application using Helm
+# helm repo add prometheus-community https://prometheus-community.github.io/helm-charts
+	# helm repo list
+# helm repo update
+Helm install
+# helm install prometheus --namespace monitoring prometheus-community/kube-prometheus-stack
+Check Helm installed or not
+	# he
+Port forwarding
+# kubectl port-forward -n monitoring service/prometheus-grafana 3000:80
+To get Credential
+# kubectl -n monitoring get secrets Prometheus-grafana -o yaml
+Prometheus Uninstall
+# helm uninstall prometheus 
+
+	
+
+
+
+
+
+	
